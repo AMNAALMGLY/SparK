@@ -41,11 +41,10 @@ def main_pt():
 
     args.base_lr = args.base_lr * eff_batch_size / 256
 
-
-
-    if project_name is not None:
-            wandb.init(project=project_name, entity="bias_migitation")
-            wandb.config.update(args)
+    if dist.is_local_master():
+        if project_name is not None:
+                wandb.init(project=project_name, entity="bias_migitation")
+                wandb.config.update(args)
 
     args.device = dist.get_device()
     # build data
@@ -79,7 +78,8 @@ def main_pt():
     ).to(args.device)
     print(f'[PT model] model = {model_without_ddp}\n')
     model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
-    wandb.watch(model)
+    if dist.is_local_master():
+        wandb.watch(model)
     # build optimizer and lr_scheduler
     param_groups: List[dict] = get_param_groups(model_without_ddp, nowd_keys={'cls_token', 'pos_embed', 'mask_token', 'gamma'})
     opt_clz = {

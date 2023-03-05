@@ -280,7 +280,7 @@ def get_dataset(config, root, uniform_dequantization=False, batch_size=128, is_i
     elif dataset == 'fMoW':
         interpol_mode = transforms.InterpolationMode.BICUBIC
 
-        train_path = os.path.join(root, 'train_62classes.csv')
+        train_path = os.path.join('/home/amna97', 'train_62classes.csv')
         train_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(FMOW.mean, FMOW.std),
@@ -290,11 +290,11 @@ def get_dataset(config, root, uniform_dequantization=False, batch_size=128, is_i
         trainset = FMOW(train_path, train_transform)
 
         crop_pct = 224/256
-        test_path = os.path.join(root, 'test_62classes.csv')
+        test_path = os.path.join('/home/amna97', 'test_62classes.csv')
         test_transform = transforms.Compose([
             transforms.ToTensor(),  # transforms.Normalize(FMOW.mean, FMOW.std),
-            transforms.Resize(int(config.data.image_size/crop_pct), interpolation=interpol_mode,),
-            transforms.CenterCrop(config.data.image_size),
+            transforms.Resize(int(config.input_size/crop_pct), interpolation=interpol_mode,),
+            transforms.CenterCrop(config.input_size),
         ] + ([UniformDequant()] if uniform_dequantization else []))
         testset = FMOW(test_path, test_transform)
         n_classes = 62
