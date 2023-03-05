@@ -14,6 +14,7 @@ from typing import List
 import torch
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
+import datasets
 
 import dist
 import encoder
@@ -24,24 +25,49 @@ from spark import SparK
 from utils import arg_util, misc, lamb
 from utils.imagenet import build_imagenet_pretrain
 from utils.lr_control import lr_wd_annealing, get_param_groups
-
+import wandb
 
 def main_pt():
+    project_name='spark_convnext'
     args: arg_util.Args = arg_util.init_dist_and_get_args()
     print(f'initial args:\n{str(args)}')
     args.log_epoch()
-    
+    #some setup of wandb
+    args.bs = args.bs // dist.get_world_size()
+    args.bs = args.bs * dist.get_world_size()
+    accum_iter = getattr(args, 'accum_iter', 1)
+    eff_batch_size = args.bs * accum_iter
+    print(f"Effective global batch size: {eff_batch_size}, accum_iter: {accum_iter}")
+
+    args.base_lr = args.base_lr * eff_batch_size / 256
+
+
+
+    if project_name is not None:
+            wandb.init(project=project_name, entity="bias_migitation")
+            wandb.config.update(args)
+
+    args.device = dist.get_device()
     # build data
     print(f'[build data for pre-training] ...\n')
-    dataset_train = build_imagenet_pretrain(args.data_path, args.input_size)
-    data_loader_train = DataLoader(
-        dataset=dataset_train, num_workers=args.dataloader_workers, pin_memory=True,
-        batch_sampler=DistInfiniteBatchSampler(
-            dataset_len=len(dataset_train), glb_batch_size=args.glb_batch_size, seed=args.seed,
-            shuffle=True, filling=True, rank=dist.get_rank(), world_size=dist.get_world_size(),
-        ), worker_init_fn=worker_init_fn
+    # dataset_train = build_imagenet_pretrain(args.data_path, args.input_size)
+    # data_loader_train = DataLoader(
+    #     dataset=dataset_train, num_workers=args.dataloader_workers, pin_memory=True,
+    #     batch_sampler=DistInfiniteBatchSampler(
+    #         dataset_len=len(dataset_train), glb_batch_size=args.glb_batch_size, seed=args.seed,
+    #         shuffle=True, filling=True, rank=dist.get_rank(), world_size=dist.get_world_size(),
+    #     ), worker_init_fn=worker_init_fn
+    # )
+    # Build data iterators
+    train_loader, eval_loader, n_classes = datasets.get_dataset(
+        args, args.data_path, uniform_dequantization=args.uniform_dequantization,
+        batch_size=args.bs
     )
-    itrt_train, iters_train = iter(data_loader_train), len(data_loader_train)
+
+    # Create data normalizer and its inverse
+    scaler = datasets.get_data_scaler(args)
+    inverse_scaler = datasets.get_data_inverse_scaler(args)
+    itrt_train, iters_train = iter(train_loader), len(train_loader)
     print(f'[dataloader] gbs={args.glb_batch_size}, lbs={args.batch_size_per_gpu}, iters_train={iters_train}')
     
     # build encoder and decoder
@@ -53,7 +79,7 @@ def main_pt():
     ).to(args.device)
     print(f'[PT model] model = {model_without_ddp}\n')
     model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
-    
+    wandb.watch(model)
     # build optimizer and lr_scheduler
     param_groups: List[dict] = get_param_groups(model_without_ddp, nowd_keys={'cls_token', 'pos_embed', 'mask_token', 'gamma'})
     opt_clz = {
@@ -97,7 +123,10 @@ def main_pt():
             args.remain_time, args.finish_time = str(remain_time), str(finish_time)
             args.last_loss = last_loss
             args.log_epoch()
-            
+            if dist.is_local_master():
+                wandb.log({
+                    'train_loss_step': min_loss,
+                })
             tb_lg.update(min_loss=min_loss, head='train', step=ep)
             tb_lg.update(rest_hours=round(remain_secs/60/60, 2), head='z_burnout', step=ep)
             tb_lg.flush()

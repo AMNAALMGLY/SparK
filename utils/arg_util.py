@@ -15,9 +15,9 @@ import dist
 
 class Args(Tap):
     # environment
-    exp_name: str
-    exp_dir: str
-    data_path: str
+    exp_name: str='sparkconvnext'
+    exp_dir: str = '/home/amna97/'
+    data_path: str='/home/amna97/fmow-rgb/'
     resume_from: str = ''   # resume from some checkpoint.pth
     seed: int = 1
     
@@ -26,15 +26,17 @@ class Args(Tap):
     hierarchy: int = 4
     
     # encoder hyperparameters
-    model: str = 'res50'
-    model_alias: str = 'res50'
+    model: str = 'cnxB'
+    model_alias: str = 'cnxB'
     input_size: int = 224
     sbn: bool = True
     
     # data hyperparameters
-    bs: int = 4096
+    bs: int = 128
     dataloader_workers: int = 8
-    
+    data :str = 'fMoW'
+    uniform_dequantization:str = False
+
     # pre-training hyperparameters
     dp: float = 0.0
     base_lr: float = 2e-4
