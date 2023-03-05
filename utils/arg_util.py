@@ -36,6 +36,7 @@ class Args(Tap):
     dataloader_workers: int = 8
     data :str = 'fMoW'
     uniform_dequantization:str = False
+    centered: bool = True
 
     # pre-training hyperparameters
     dp: float = 0.0

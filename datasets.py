@@ -63,7 +63,7 @@ except:
 
 def get_data_scaler(config):
     """Data normalizer. Assume data are always in [0, 1]."""
-    if config.data.centered:
+    if config.centered:
         # Rescale to [-1, 1]
         return lambda x: x * 2. - 1.
     else:
