@@ -125,8 +125,9 @@ def main_pt():
             args.log_epoch()
             if dist.is_local_master():
                 wandb.log({
-                    'train_loss_step': min_loss,
+                    'last_train_loss': last_loss,'epoch':ep+1
                 })
+                wandb.log({'min_train_loss':min_loss,'epoch':ep+1})
             # tb_lg.update(min_loss=min_loss, head='train', step=ep)
             # tb_lg.update(rest_hours=round(remain_secs/60/60, 2), head='z_burnout', step=ep)
             # tb_lg.flush()
@@ -183,6 +184,8 @@ def pre_train_one_ep(ep, args: arg_util.Args, tb_lg, itrt_train, iters_train, mo
         # log
         me.update(last_loss=loss)
         me.update(max_lr=max_lr)
+        if dist.is_local_master():
+            wandb.log({'step_loss':me.meters['last_loss'].global_avg})
         # tb_lg.update(loss=me.meters['last_loss'].global_avg, head='train_loss')
         # tb_lg.update(sche_lr=max_lr, head='train_hp/lr_max')
         # tb_lg.update(sche_lr=min_lr, head='train_hp/lr_min')
