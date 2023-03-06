@@ -24,36 +24,37 @@ HP_DEFAULT_VALUES = {
 
 class FineTuneArgs(Tap):
     # environment
-    exp_name: str
-    exp_dir: str
-    data_path: str
-    model: str
-    resume_from: str = ''   # resume from some checkpoint.pth
+    exp_name: str ='finetunefmow'
+    exp_dir: str ='/home/amna97/SparK'
+    data_path: str ='/home/amna97/atlas/u/buzkent/fmow-rgb'
+    model: str= 'convnext_base'
+    resume_from: str = '/home/amna97/convnext_base_1kpretrained.pth'   # resume from some checkpoint.pth
     
     img_size: int = 224
     dataloader_workers: int = 8
-    
+    data: str  = 'fMoW'
+    centered:bool = True
     # ImageNet classification fine-tuning hyperparameters; see `HP_DEFAULT_VALUES` above for detailed default values
     # - batch size, epoch
-    bs: int = 0             # global batch size (== batch_size_per_gpu * num_gpus)
-    ep: int = 0             # number of epochs
-    wp_ep: int = 0          # epochs for warmup
+    bs = 128           # global batch size (== batch_size_per_gpu * num_gpus)
+    ep= 50             # number of epochs
+    wp_ep=0          # epochs for warmup
     
     # - optimization
-    opt: str = ''           # optimizer; 'adam' or 'lamb'
-    base_lr: float = 0.     # lr == base_lr * (bs)
-    lr_scale: float = 0.    # see file `lr_decay.py` for more details
-    clip: int = -1          # use gradient clipping if clip > 0
+    opt: str = 'adam'           # optimizer; 'adam' or 'lamb'
+    base_lr: float = 5e-4     # lr == base_lr * (bs)
+    lr_scale: float = 0.97    # see file `lr_decay.py` for more details
+    clip: int = 2         # use gradient clipping if clip > 0
     
     # - regularization tricks
-    wd: float = 0.          # weight decay
-    mixup: float = 0.       # use mixup if mixup > 0
+    wd: float = 0.04          # weight decay
+    mixup: float = 0.8       # use mixup if mixup > 0
     rep_aug: int = 0        # use repeated augmentation if rep_aug > 0
-    drop_path: float = 0.   # drop_path ratio
+    drop_path: float = 0.1   # drop_path ratio
     
     # - other tricks
-    ema: float = 0.         # use EMA if ema > 0
-    sbn: bool = False       # use SyncBatchNorm
+    ema: float = 0.9999         # use EMA if ema > 0
+    sbn: bool = True       # use SyncBatchNorm
     
     # NO NEED TO SPECIFIED; each of these args would be updated in runtime automatically
     lr: float = None
