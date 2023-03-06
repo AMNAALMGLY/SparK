@@ -10,7 +10,6 @@ import time
 import torch
 import torch.distributed as tdist
 from timm.utils import ModelEmaV2
-from torch.utils.tensorboard import SummaryWriter
 
 import datasets
 from arg import get_args, FineTuneArgs
@@ -50,7 +49,7 @@ def main_ft():
         args.device = dist.get_device()
         # build data
         print(f'[build data for fintuning] ...\n')
-
+        model.to(args.device)
         # Build data iterators
         train_loader, eval_loader, n_classes = datasets.get_dataset(
             args, args.data_path, uniform_dequantization=False,
