@@ -12,7 +12,7 @@ import torch.distributed as tdist
 from timm.utils import ModelEmaV2
 from torch.utils.tensorboard import SummaryWriter
 
-from SparK import datasets
+import datasets
 from arg import get_args, FineTuneArgs
 from models import ConvNeXt, ResNet
 __for_timm_registration = ConvNeXt, ResNet
@@ -42,7 +42,7 @@ def main_ft():
         #     args.dataloader_workers, args.batch_size_per_gpu, args.world_size, args.global_rank
         # )
 
-        if dist.is_local_master():
+        if args.is_master:
             if project_name is not None:
                 wandb.init(project=project_name, entity="bias_migitation")
                 wandb.config.update(args)
@@ -53,7 +53,7 @@ def main_ft():
 
         # Build data iterators
         train_loader, eval_loader, n_classes = datasets.get_dataset(
-            args, args.data_path, uniform_dequantization=args.uniform_dequantization,
+            args, args.data_path, uniform_dequantization=False,
             batch_size=args.bs
         )
         

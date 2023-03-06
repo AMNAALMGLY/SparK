@@ -30,7 +30,7 @@ class FineTuneArgs(Tap):
     model: str= 'convnext_base'
     resume_from: str = '/home/amna97/convnext_base_1kpretrained.pth'   # resume from some checkpoint.pth
     
-    img_size: int = 224
+    input_size: int = 224
     dataloader_workers: int = 8
     data: str  = 'fMoW'
     centered:bool = True
