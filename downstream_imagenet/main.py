@@ -43,7 +43,7 @@ def main_ft():
         args, args.data_path, uniform_dequantization=False,
         batch_size=args.bs
     )
-
+    args.device=device
     criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
     model_without_ddp.to(args.device)
     model_ema.to(args.device)
