@@ -10,6 +10,7 @@ import time
 import torch
 import torch.distributed as tdist
 from timm.utils import ModelEmaV2
+from torch.nn.parallel import DistributedDataParallel
 
 import datasets
 from arg import get_args, FineTuneArgs
@@ -28,10 +29,13 @@ def main_ft():
     args: FineTuneArgs = get_args(world_size, global_rank, local_rank, device)
     print(f'initial args:\n{str(args)}')
     args.log_epoch()
-    
+    args.device = dist.get_device()
+
     criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
+    model_without_ddp.to(args.device)
     ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
-    
+    model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
+
     if ep_start >= args.ep: # load from a complete checkpoint file
         print(f'  [*] [FT already done]    Max/Last Acc: {performance_desc}')
     else:
@@ -46,10 +50,9 @@ def main_ft():
                 wandb.init(project=project_name, entity="bias_migitation")
                 wandb.config.update(args)
 
-        args.device = dist.get_device()
         # build data
         print(f'[build data for fintuning] ...\n')
-        model.to(args.device)
+
         # Build data iterators
         train_loader, eval_loader, n_classes = datasets.get_dataset(
             args, args.data_path, uniform_dequantization=False,
