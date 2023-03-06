@@ -12,15 +12,19 @@ import torch.distributed as tdist
 from timm.utils import ModelEmaV2
 from torch.utils.tensorboard import SummaryWriter
 
+from SparK import datasets
 from arg import get_args, FineTuneArgs
 from models import ConvNeXt, ResNet
 __for_timm_registration = ConvNeXt, ResNet
 from lr_decay import lr_wd_annealing
 from util import init_distributed_environ, create_model_opt, load_checkpoint, save_checkpoint
 from data import create_classification_dataset
-
+import wandb
+import dist
 
 def main_ft():
+    project_name='spark_convnext'
+
     world_size, global_rank, local_rank, device = init_distributed_environ()
     args: FineTuneArgs = get_args(world_size, global_rank, local_rank, device)
     print(f'initial args:\n{str(args)}')
@@ -32,16 +36,31 @@ def main_ft():
     if ep_start >= args.ep: # load from a complete checkpoint file
         print(f'  [*] [FT already done]    Max/Last Acc: {performance_desc}')
     else:
-        tb_lg = SummaryWriter(args.tb_lg_dir) if args.is_master else None
-        loader_train, iters_train, iterator_val, iters_val = create_classification_dataset(
-            args.data_path, args.img_size, args.rep_aug,
-            args.dataloader_workers, args.batch_size_per_gpu, args.world_size, args.global_rank
+        # tb_lg = SummaryWriter(args.tb_lg_dir) if args.is_master else None
+        # loader_train, iters_train, iterator_val, iters_val = create_classification_dataset(
+        #     args.data_path, args.img_size, args.rep_aug,
+        #     args.dataloader_workers, args.batch_size_per_gpu, args.world_size, args.global_rank
+        # )
+
+        if dist.is_local_master():
+            if project_name is not None:
+                wandb.init(project=project_name, entity="bias_migitation")
+                wandb.config.update(args)
+
+        args.device = dist.get_device()
+        # build data
+        print(f'[build data for fintuning] ...\n')
+
+        # Build data iterators
+        train_loader, eval_loader, n_classes = datasets.get_dataset(
+            args, args.data_path, uniform_dequantization=args.uniform_dequantization,
+            batch_size=args.bs
         )
         
         # train & eval
-        tot_pred, last_acc = evaluate(args.device, iterator_val, iters_val, model)
+        tot_pred, last_acc = evaluate(args.device, iter(eval_loader), len(eval_loader), model)
         max_acc = last_acc
-        max_acc_e = last_acc_e = evaluate(args.device, iterator_val, iters_val, model_ema.module)[-1]
+        max_acc_e = last_acc_e = evaluate(args.device,  iter(eval_loader), len(eval_loader), model_ema.module)[-1]
         print(f'[fine-tune] initial acc={last_acc:.2f}, ema={last_acc_e:.2f}')
         
         ep_eval = set(range(0, args.ep//3, 5)) | set(range(args.ep//3, args.ep))
@@ -52,16 +71,16 @@ def main_ft():
         ft_start_time = time.time()
         for ep in range(ep_start, args.ep):
             ep_start_time = time.time()
-            if hasattr(loader_train, 'sampler') and hasattr(loader_train.sampler, 'set_epoch'):
-                loader_train.sampler.set_epoch(ep)
+            if hasattr(train_loader, 'sampler') and hasattr(train_loader.sampler, 'set_epoch'):
+                train_loader.sampler.set_epoch(ep)
                 if 0 <= ep <= 3:
                     print(f'[loader_train.sampler.set_epoch({ep})]')
             
-            train_loss, train_acc = fine_tune_one_epoch(ep, args, tb_lg, loader_train, iters_train, criterion, mixup_fn, model, model_ema, optimizer, params_req_grad)
+            train_loss, train_acc = fine_tune_one_epoch(ep, args, None, train_loader, len(train_loader), criterion, mixup_fn, model, model_ema, optimizer, params_req_grad)
             if ep in ep_eval:
                 eval_start_time = time.time()
-                tot_pred, last_acc = evaluate(args.device, iterator_val, iters_val, model)
-                tot_pred_e, last_acc_e = evaluate(args.device, iterator_val, iters_val, model_ema.module)
+                tot_pred, last_acc = evaluate(args.device,  iter(eval_loader), len(eval_loader), model)
+                tot_pred_e, last_acc_e = evaluate(args.device,  iter(eval_loader), len(eval_loader), model_ema.module)
                 eval_cost = round(time.time() - eval_start_time, 2)
                 performance_desc = f'Max (Last) Acc: {max(max_acc, last_acc):.2f} ({last_acc:.2f} o {tot_pred})    EMA: {max(max_acc_e, last_acc_e):.2f} ({last_acc_e:.2f} o {tot_pred_e})'
                 states = model_without_ddp.state_dict(), model_ema.module.state_dict(), optimizer.state_dict()
@@ -86,21 +105,29 @@ def main_ft():
             args.log_epoch()
             
             if args.is_master:
-                tb_lg.add_scalar(f'ft_train/ep_loss', train_loss, ep)
-                tb_lg.add_scalar(f'ft_eval/max_acc', max_acc, ep)
-                tb_lg.add_scalar(f'ft_eval/last_acc', last_acc, ep)
-                tb_lg.add_scalar(f'ft_eval/max_acc_ema', max_acc_e, ep)
-                tb_lg.add_scalar(f'ft_eval/last_acc_ema', last_acc_e, ep)
-                tb_lg.add_scalar(f'ft_z_burnout/rest_hours', round(remain_secs/60/60, 2), ep)
-                tb_lg.flush()
+                wandb.log({'epoch':ep,'train_ep_loss':train_loss})
+                wandb.log({'epoch': ep, 'eval/max_acc': max_acc})
+                wandb.log({'epoch': ep, 'eval/last_acc': last_acc})
+                wandb.log({'epoch': ep, 'eval/max_acc_ema': max_acc_e})
+                wandb.log({'epoch': ep, 'eval/last_acc_ema': last_acc_e})
+                wandb.log({'epoch': ep, 'z_burnout/rest_hours': round(remain_secs/60/60, 2)})
+
+                # tb_lg.add_scalar(f'ft_train/ep_loss', train_loss, ep)
+                # tb_lg.add_scalar(f'ft_eval/max_acc', max_acc, ep)
+                # tb_lg.add_scalar(f'ft_eval/last_acc', last_acc, ep)
+                # tb_lg.add_scalar(f'ft_eval/max_acc_ema', max_acc_e, ep)
+                # tb_lg.add_scalar(f'ft_eval/last_acc_ema', last_acc_e, ep)
+                # tb_lg.add_scalar(f'ft_z_burnout/rest_hours', round(remain_secs/60/60, 2), ep)
+                # tb_lg.flush()
         
         # finish fine-tuning
         result_acc = max(max_acc, max_acc_e)
         if args.is_master:
-            tb_lg.add_scalar('ft_result/result_acc', result_acc, ep_start)
-            tb_lg.add_scalar('ft_result/result_acc', result_acc, args.ep)
-            tb_lg.flush()
-            tb_lg.close()
+            wandb.log({"ep":args.ep,"result_acc":result_acc})
+            # tb_lg.add_scalar('ft_result/result_acc', result_acc, ep_start)
+            # tb_lg.add_scalar('ft_result/result_acc', result_acc, args.ep)
+            # tb_lg.flush()
+            # tb_lg.close()
         print(f'final args:\n{str(args)}')
         print('\n\n')
         print(f'  [*] [FT finished]    {performance_desc}    Total Cost: {(time.time() - ft_start_time) / 60 / 60:.1f}h\n')
@@ -112,7 +139,7 @@ def main_ft():
     args.log_epoch()
 
 
-def fine_tune_one_epoch(ep, args: FineTuneArgs, tb_lg: SummaryWriter, loader_train, iters_train, criterion, mixup_fn, model, model_ema: ModelEmaV2, optimizer, params_req_grad):
+def fine_tune_one_epoch(ep, args: FineTuneArgs, tb_lg, loader_train, iters_train, criterion, mixup_fn, model, model_ema: ModelEmaV2, optimizer, params_req_grad):
     model.train()
     tot_loss = tot_acc = 0.0
     log_freq = max(1, round(iters_train * 0.7))
@@ -152,12 +179,13 @@ def fine_tune_one_epoch(ep, args: FineTuneArgs, tb_lg: SummaryWriter, loader_tra
         
         # log
         if args.is_master and cur_it % log_freq == 0:
-            tb_lg.add_scalar(f'ft_train/it_loss', loss, cur_it)
-            tb_lg.add_scalar(f'ft_train/it_acc', acc, cur_it)
-            tb_lg.add_scalar(f'ft_hp/min_lr', min_lr, cur_it), tb_lg.add_scalar(f'ft_hp/max_lr', max_lr, cur_it)
-            tb_lg.add_scalar(f'ft_hp/min_wd', min_wd, cur_it), tb_lg.add_scalar(f'ft_hp/max_wd', max_wd, cur_it)
-            if orig_norm is not None:
-                tb_lg.add_scalar(f'ft_hp/orig_norm', orig_norm, cur_it)
+            wandb.log({f'ft_train/it_loss': loss, 'step':cur_it})
+            wandb.log({f'ft_train/it_acc': acc, 'step':cur_it})
+            wandb.log({f'ft_hp/min_lr': min_lr})
+            wandb.log({f'ft_hp/max_lr':max_lr})
+            # tb_lg.add_scalar(f'ft_hp/min_wd', min_wd, cur_it), tb_lg.add_scalar(f'ft_hp/max_wd', max_wd, cur_it)
+            # if orig_norm is not None:
+            #     tb_lg.add_scalar(f'ft_hp/orig_norm', orig_norm, cur_it)
         
         if it in [3, iters_train//2, iters_train-1]:
             remain_secs = (iters_train-1 - it) * (time.time() - ep_start_time) / (it + 1)
