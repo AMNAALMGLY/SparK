@@ -29,10 +29,24 @@ def main_ft():
     args: FineTuneArgs = get_args(world_size, global_rank, local_rank, device)
     print(f'initial args:\n{str(args)}')
     args.log_epoch()
-    args.device = dist.get_device()
+
+    if args.is_master:
+        if project_name is not None:
+            wandb.init(project=project_name, entity="bias_migitation")
+            wandb.config.update(args)
+    # args.device = dist.get_device()
+    # build data
+    print(f'[build data for fintuning] ...\n')
+
+    # Build data iterators
+    train_loader, eval_loader, n_classes = datasets.get_dataset(
+        args, args.data_path, uniform_dequantization=False,
+        batch_size=args.bs
+    )
 
     criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
     model_without_ddp.to(args.device)
+    model_ema.to(args.device)
     ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
     model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
 
@@ -45,19 +59,8 @@ def main_ft():
         #     args.dataloader_workers, args.batch_size_per_gpu, args.world_size, args.global_rank
         # )
 
-        if args.is_master:
-            if project_name is not None:
-                wandb.init(project=project_name, entity="bias_migitation")
-                wandb.config.update(args)
 
-        # build data
-        print(f'[build data for fintuning] ...\n')
 
-        # Build data iterators
-        train_loader, eval_loader, n_classes = datasets.get_dataset(
-            args, args.data_path, uniform_dequantization=False,
-            batch_size=args.bs
-        )
         
         # train & eval
         tot_pred, last_acc = evaluate(args.device, iter(eval_loader), len(eval_loader), model)
