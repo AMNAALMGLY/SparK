@@ -63,10 +63,10 @@ def main_ft():
 
         
         # train & eval
-        tot_pred, last_acc = evaluate(args.device, iter(eval_loader), len(eval_loader), model)
-        max_acc = last_acc
-        max_acc_e = last_acc_e = evaluate(args.device,  iter(eval_loader), len(eval_loader), model_ema.module)[-1]
-        print(f'[fine-tune] initial acc={last_acc:.2f}, ema={last_acc_e:.2f}')
+        # tot_pred, last_acc = evaluate(args.device, iter(eval_loader), len(eval_loader), model)
+        # max_acc = last_acc
+        # max_acc_e = last_acc_e = evaluate(args.device,  iter(eval_loader), len(eval_loader), model_ema.module)[-1]
+        # print(f'[fine-tune] initial acc={last_acc:.2f}, ema={last_acc_e:.2f}')
         
         ep_eval = set(range(0, args.ep//3, 5)) | set(range(args.ep//3, args.ep))
         print(f'[FT start] ep_eval={sorted(ep_eval)} ')
