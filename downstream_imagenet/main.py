@@ -45,10 +45,10 @@ def main_ft():
     )
     args.device=device
     criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
-    model_without_ddp.to(args.device)
-    model_ema.to(args.device)
+    # model_without_ddp.to(args.device)
+    # model_ema.to(args.device)
     ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
-    model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
+    # model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
 
     if ep_start >= args.ep: # load from a complete checkpoint file
         print(f'  [*] [FT already done]    Max/Last Acc: {performance_desc}')
