@@ -26,9 +26,13 @@ def main_ft():
     project_name='spark_convnext'
 
     world_size, global_rank, local_rank, device = init_distributed_environ()
+    # args: arg_util.Args = arg_util.init_dist_and_get_args()
+
     args: FineTuneArgs = get_args(world_size, global_rank, local_rank, device)
     print(f'initial args:\n{str(args)}')
     args.log_epoch()
+    criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
+    ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
 
     if args.is_master:
         if project_name is not None:
@@ -44,10 +48,8 @@ def main_ft():
         batch_size=args.bs
     )
     args.device=device
-    criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
+
     # model_without_ddp.to(args.device)
-    # model_ema.to(args.device)
-    ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
     # model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
 
     if ep_start >= args.ep: # load from a complete checkpoint file
