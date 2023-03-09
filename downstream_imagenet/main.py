@@ -83,7 +83,7 @@ def main_ft():
                 if 0 <= ep <= 3:
                     print(f'[loader_train.sampler.set_epoch({ep})]')
             
-            train_loss, train_acc = fine_tune_one_epoch(ep, args, None, train_loader, len(train_loader), criterion, mixup_fn, model, model_ema, optimizer, params_req_grad)
+            train_loss, train_acc = fine_tune_one_epoch(ep, args, None, train_loader, len(train_loader), criterion, mixup_fn, model, model_ema, optimizer, params_req_grad,args.accum_iter)
             if ep in ep_eval:
                 eval_start_time = time.time()
                 tot_pred, last_acc = evaluate(args.device,  iter(eval_loader), len(eval_loader), model)
@@ -146,7 +146,7 @@ def main_ft():
     args.log_epoch()
 
 
-def fine_tune_one_epoch(ep, args: FineTuneArgs, tb_lg, loader_train, iters_train, criterion, mixup_fn, model, model_ema: ModelEmaV2, optimizer, params_req_grad):
+def fine_tune_one_epoch(ep, args: FineTuneArgs, tb_lg, loader_train, iters_train, criterion, mixup_fn, model, model_ema: ModelEmaV2, optimizer, params_req_grad,accum_iter=1):
     model.train()
     tot_loss = tot_acc = 0.0
     log_freq = max(1, round(iters_train * 0.7))
@@ -171,16 +171,19 @@ def fine_tune_one_epoch(ep, args: FineTuneArgs, tb_lg, loader_train, iters_train
             tot_acc += acc
         
         # backward
-        optimizer.zero_grad()
+        # optimizer.zero_grad()
         loss = criterion(oup, tar)
         loss.backward()
+        if (it + 1) % accum_iter == 0:
+            optimizer.step()
+            optimizer.zero_grad()
         loss = loss.item()
         tot_loss += loss
         if args.clip > 0:
             orig_norm = torch.nn.utils.clip_grad_norm_(params_req_grad, args.clip).item()
         else:
             orig_norm = None
-        optimizer.step()
+        # optimizer.step()
         model_ema.update(model)
         torch.cuda.synchronize()
         
