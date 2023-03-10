@@ -65,10 +65,10 @@ def main_ft():
 
         
         # train & eval
-        # tot_pred, last_acc = evaluate(args.device, iter(eval_loader), len(eval_loader), model)
-        # max_acc = last_acc
-        # max_acc_e = last_acc_e = evaluate(args.device,  iter(eval_loader), len(eval_loader), model_ema.module)[-1]
-        # print(f'[fine-tune] initial acc={last_acc:.2f}, ema={last_acc_e:.2f}')
+        tot_pred, last_acc = evaluate(args.device, iter(eval_loader), len(eval_loader), model)
+        max_acc = last_acc
+        max_acc_e = last_acc_e = evaluate(args.device,  iter(eval_loader), len(eval_loader), model_ema.module)[-1]
+        print(f'[fine-tune] initial acc={last_acc:.2f}, ema={last_acc_e:.2f}')
         
         ep_eval = set(range(0, args.ep//3, 5)) | set(range(args.ep//3, args.ep))
         print(f'[FT start] ep_eval={sorted(ep_eval)} ')
@@ -215,10 +215,11 @@ def evaluate(dev, iterator_val, iters_val, model):
         tot_pred += tar.shape[0]
         inp = inp.to(dev, non_blocking=True)
         tar = tar.to(dev, non_blocking=True)
-        oup = model(inp)
-        tot_correct += oup.argmax(dim=1).eq(tar).sum().item()
-    model.train(training)
-    t = torch.tensor([tot_pred, tot_correct]).to(dev)
+        with torch.cuda.amp.autocast():
+            oup = model(inp)
+            tot_correct += oup.argmax(dim=1).eq(tar).sum().item()
+            model.train(training)
+            t = torch.tensor([tot_pred, tot_correct]).to(dev)
     tdist.all_reduce(t)
     return t[0].item(), (t[1] / t[0]).item() * 100.
 
