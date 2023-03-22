@@ -161,6 +161,7 @@ def pre_train_one_ep(ep, args: arg_util.Args, tb_lg, itrt_train, iters_train, mo
     
     for it, (inp, _) in enumerate(me.log_every(iters_train, itrt_train, 3, header)):
         # adjust lr and wd
+        
         min_lr, max_lr, min_wd, max_wd = lr_wd_annealing(optimizer, args.lr, args.wd, args.wde, it + ep * iters_train, args.wp_ep * iters_train, args.ep * iters_train)
         
         # forward and backward

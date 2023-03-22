@@ -15,19 +15,19 @@ import dist
 
 class Args(Tap):
     # environment
-    exp_name: str='sparkconvnext'
+    exp_name: str='sparkconvnextL'
     exp_dir: str = '/home/amna97/'
     data_path: str='/home/amna97/fmow-rgb/'
     resume_from: str = ''   # resume from some checkpoint.pth
     seed: int = 1
     
     # SparK hyperparameters
-    mask: float = 0.6
+    mask: float = 0.5
     hierarchy: int = 4
     
     # encoder hyperparameters
-    model: str = 'cnxB'
-    model_alias: str = 'cnxB'
+    model: str = 'cnxL'
+    model_alias: str = 'cnxL'
     input_size: int = 224
     sbn: bool = True
     
@@ -43,7 +43,7 @@ class Args(Tap):
     base_lr: float = 2e-4
     wd: float = 0.04
     wde: float = 0.2
-    ep: int = 1600
+    ep: int = 100
     wp_ep: int = 40
     clip: int = 5.
     opt: str = 'lamb'

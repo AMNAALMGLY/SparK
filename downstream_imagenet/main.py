@@ -32,8 +32,11 @@ def main_ft():
     print(f'initial args:\n{str(args)}')
     args.log_epoch()
     criterion, mixup_fn, model_without_ddp, model, model_ema, optimizer = create_model_opt(args)
-    ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
-
+    ep_start=0
+    if args.resume_from:
+            ep_start, performance_desc = load_checkpoint(args.resume_from, model_without_ddp, model_ema, optimizer)
+    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print('n_parameters ',n_parameters)
     if args.is_master:
         if project_name is not None:
             wandb.init(project=project_name, entity="bias_migitation")
